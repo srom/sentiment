@@ -7,7 +7,11 @@ from nltk.tokenize import word_tokenize
 from nltk.probability import FreqDist
 import numpy as np
 
-#==== gradient descent constants
+
+FEATURES_NUMBER = 1000
+NGRAMS_NUMBER = 2
+
+#==== Gradient descent constants
 MAX_ITERATIONS = 100
 THRESHOLD_CONVERGENCE = 0.5 # in percentage
 THRESHOLD_DIVERGENCE = 5 # in percentage
@@ -49,6 +53,9 @@ class SentimentMachine(object):
             A list of ngrams.
         """
         # lowercase and tokenize
+        # TODO split by sentences
+        # TODO stemmize
+        # remove irrelevant stop words
         tokens = word_tokenize(document.lower())
         # remove punctuation
         tokens = [word for word in tokens if re.search('[a-z0-9]+', word)]
@@ -78,7 +85,6 @@ class SentimentMachine(object):
             pass
 
         # compute all ngrams
-        print '== Compute %d-grams' % n
         all_ngrams = []
         for document in self.training_set:
             all_ngrams.extend(self.compute_ngrams(document, n))
@@ -92,50 +98,48 @@ class SentimentMachine(object):
 
     def document_features(self, document):
         """
-        Compute the 6000 features of a given document.
-         - 2000 most common words: 1 if the document contains this word, else 0
-         - 2000 most common bigrams: 1 if the document contains this bigram, else 0
-         - 2000 most common trigrams: 1 if the document contains this trigram, else 0
+        Compute the nb features of a given document.
+         - most common words: 1 if the document contains this word, else 0
+         - most common bigrams: 1 if the document contains this bigram, else 0
 
          Args:
             document: The document as a string.
 
         Returns:
-            A list of 6000 elements.
+            A list of binary features.
         """
         features = []
 
-        common_ngrams = []
-        ngrams = set(self.compute_ngrams(document, 2))
-        for ngram in self.get_most_common_ngrams(2, 2000):
-            common_ngrams.append(1 if ngram in ngrams else 0)
-        features.extend(common_ngrams)
-
-        # most common ngrams for n = 1 to 3
-        # for n in range(3):
-        #     common_ngrams = []
-        #     ngrams = set(self.compute_ngrams(document, n+1))
-        #     for ngram in self.get_most_common_ngrams(n+1, 2000):
-        #         common_ngrams.append(1 if ngram in ngrams else 0)
-        #     features.extend(common_ngrams)
+        # most common ngrams for n = 1 to 2
+        nb_ngrams = NGRAMS_NUMBER
+        nb_features = FEATURES_NUMBER / nb_ngrams
+        for n in range(nb_ngrams):
+            common_ngrams = []
+            # get ngrams in the document
+            ngrams = set(self.compute_ngrams(document, n+1))
+            for ngram in self.get_most_common_ngrams(n+1, nb_features):
+                # if ngram is a common one then feature = 1 else 0
+                common_ngrams.append(1 if ngram in ngrams else 0)
+            # add new feature 
+            features.extend(common_ngrams)
 
         return features
 
 
-    def load_train_matrix(self):
+    def compute_features_matrix(self, train_set=None):
         """
-        Load the Nx6000 train matrix X where N is equals to the number of 
-        documents in the training set.
+        Load the NxM matrix X where N is equals to the number of documents 
+        in the set and M is equal to the number of features.
+
+        Args:
+            train_set: A list of documents (list of strings).
+                If None, self.training_set is used.
 
         Returns:
-            A Nx6000 matrix (numpy.matrix) 
+            A NxM matrix (numpy.array) 
         """
         m = []
-        count = 0
-        total = len(self.training_set)
-        for document in self.training_set:
-            count += 1
-            print '=== Document %d / %d' % (count, total)
+        for document in train_set or self.training_set:
             m.append(self.document_features(document))
         return np.array(m)
 
@@ -148,8 +152,8 @@ class SentimentMachine(object):
             speed: Speed of the gradient descent.
         """
         # load training matrix
-        print '==== Load training matrix...'
-        x = self.load_train_matrix()
+        print '==== Compute training set features...'
+        x = self.compute_features_matrix()
         y = np.transpose(np.array(self.score_set))
         print '==== Done'
 
@@ -165,8 +169,10 @@ class SentimentMachine(object):
 
         # train like a boss
         print '==== Start training...'
+        print '==== (Stochastic Gradient Descent)'
         self.w = gradient_descent(x_train, y_train, x_val, y_val, speed)
         print '==== Done'
+        return self.w
 
 
     def test(self, test_string):
@@ -188,7 +194,7 @@ class SentimentMachine(object):
 
         # compute h(transpose(w) * x) and return the result according
         # to the boundary h(transpose(w) * x) = 0
-        return 1 if sigmoid(np.dot(np.transpose(w), x)) >= 0 else 0
+        return 1 if sigmoid(np.dot(np.transpose(self.w), x)) >= 0 else 0
 
 
 def sigmoid(z):
@@ -208,15 +214,15 @@ def cost(x, w, y, h):
     Cost function of the logistic regression.
 
     Args:
-        x: documents matrix (numpy.matrix)
-        w: weight vector (numpy.matrix)
-        y: output vector (numpy.matrix)
-        h: function of x and w.
+        x: documents matrix (numpy.array)
+        w: weight vector (numpy.array)
+        y: output vector (numpy.array)
+        h: function of x and w
 
     Returns:
         The cost value (float).
     """
-    [n,m] = x.shape
+    n = x.shape[0]
     val = 0
     for i in xrange(n):
         val += (y[i] * np.log(h(x[i], w))
@@ -228,14 +234,14 @@ def gradient_descent(train_set, y_train, test_set, y_test, speed):
     Stochastic gradient descent.
 
     Args:
-        train_set: the train set (numpy.matrix)
-        y_train: the training output vactor (numpy.matrix)
-        test_set: the test set (numpy.matrix)
-        y_test: the testing output vactor (numpy.matrix)
+        train_set: the train set (numpy.array)
+        y_train: the training output vector (numpy.array)
+        test_set: the test set (numpy.array)
+        y_test: the testing output vector (numpy.array)
         speed: The speed of the descent.
 
     Returns:
-        The weight vector which minimize the logistic cost function (numpy.matrix)
+        The weight vector which minimize the logistic cost function (numpy.array)
     """
     # get the dimensions of the train set
     [n,m] = train_set.shape
@@ -258,7 +264,6 @@ def gradient_descent(train_set, y_train, test_set, y_test, speed):
 
         # compute w
         for i in xrange(n):
-            # print '%d / %d' % (i, n)
             x = train_set[i]
             for j in xrange(m):
                 w[j] = w[j] - speed * (h(x, w) - y_train[i]) * x[j]
@@ -269,7 +274,7 @@ def gradient_descent(train_set, y_train, test_set, y_test, speed):
             err_diff = abs(100 - (last_err / mse) * 100)
         last_err = mse
         print 'MSE: %f' % mse
-        print 'DIFF: {} %'.format(err_diff)
+        print 'DIFF: {0} %'.format(err_diff)
         print
 
     return w
@@ -277,8 +282,10 @@ def gradient_descent(train_set, y_train, test_set, y_test, speed):
 
 def main():
     """
-    Sample train using the movie review corpus (Pang, Lee).
+    Sample training using the movie reviews corpus (Pang, Lee).
     """
+
+    #== load inputs
     documents = np.array([movie_reviews.raw(review_id) 
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
@@ -287,19 +294,38 @@ def main():
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
 
-    # select random indices
+    #== select random indices
     n = documents.shape[0]
     indices = np.random.permutation(n)
     threshold = np.floor(n*0.8)
     train_idx, test_idx = indices[:threshold], indices[threshold:]
 
-    # select training and validation sets according to these indicies
+    #== select training and validation sets according to these indicies
     x_train, x_test = documents[:, train_idx], documents[:, test_idx]
     y_train, y_test = sentiment_scores[:, train_idx], sentiment_scores[:, test_idx]
 
-    # GO!
+    #== train the model
+    print '===== Training the model...'
     sentiment = SentimentMachine(x_train.tolist(), y_train.tolist())
-    sentiment.train(0.001)
+    w = sentiment.train(0.001)
+    print '===== Model trained.'
+
+    #== test the model
+    print '===== Testing the model...'
+    # compute the MSE
+    h = lambda a,b: sigmoid(np.dot(a,b))
+    x = sentiment.compute_features_matrix(x_test.tolist())
+    mse = cost(x, w, y_test, h)
+    # compute the number of valid classifications
+    n_test = y_test.shape[0]
+    valid = 0
+    for i in xrange(n_test):
+        valid += 1 if sentiment.test(x_test[i]) == y_test[i] else 0
+    percent = 100.0 * valid / n_test
+    # print results
+    print ('== Number of well-classified documents: {0} / {1} ({2}%)'
+        .format(valid, n_test, percent))
+    print '== MSE on the test set: %f' % mse
 
 
 if __name__ == '__main__':
