@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import re
-import math
 from nltk.corpus import movie_reviews
 from nltk.util import ngrams
 from nltk.tokenize import word_tokenize
@@ -10,7 +9,7 @@ import numpy as np
 
 #==== gradient descent constants
 MAX_ITERATIONS = 100
-THRESHOLD_CONVERGENCE = 0.1 # in percentage
+THRESHOLD_CONVERGENCE = 0.5 # in percentage
 THRESHOLD_DIVERGENCE = 5 # in percentage
 #=====
 
@@ -79,12 +78,13 @@ class SentimentMachine(object):
             pass
 
         # compute all ngrams
+        print '== Compute %d-grams' % n
         all_ngrams = []
         for document in self.training_set:
-            all_ngrams.add(self.compute_ngrams(document, n))
+            all_ngrams.extend(self.compute_ngrams(document, n))
 
         # get the frequency
-        freq = FreqDist(ngram in ngrams)
+        freq = FreqDist(ngram for ngram in all_ngrams)
         # store and return the nb_ngrams most common ngrams
         self._most_common_ngrams[n] = freq.keys()[:nb_ngrams]
         return self._most_common_ngrams[n]
@@ -105,13 +105,19 @@ class SentimentMachine(object):
         """
         features = []
 
+        common_ngrams = []
+        ngrams = set(self.compute_ngrams(document, 2))
+        for ngram in self.get_most_common_ngrams(2, 2000):
+            common_ngrams.append(1 if ngram in ngrams else 0)
+        features.extend(common_ngrams)
+
         # most common ngrams for n = 1 to 3
-        for n in range(3):
-            common_ngrams = []
-            ngrams = set(self.compute_ngrams(document, n+1))
-            for ngram in self.get_most_common_ngrams(n+1, 2000):
-                common_ngrams.append(1 if ngram in ngrams else 0)
-            features.extend(common_ngrams)
+        # for n in range(3):
+        #     common_ngrams = []
+        #     ngrams = set(self.compute_ngrams(document, n+1))
+        #     for ngram in self.get_most_common_ngrams(n+1, 2000):
+        #         common_ngrams.append(1 if ngram in ngrams else 0)
+        #     features.extend(common_ngrams)
 
         return features
 
@@ -125,9 +131,13 @@ class SentimentMachine(object):
             A Nx6000 matrix (numpy.matrix) 
         """
         m = []
+        count = 0
+        total = len(self.training_set)
         for document in self.training_set:
+            count += 1
+            print '=== Document %d / %d' % (count, total)
             m.append(self.document_features(document))
-        return np.matrix(m)
+        return np.array(m)
 
 
     def train(self, speed):
@@ -140,10 +150,8 @@ class SentimentMachine(object):
         # load training matrix
         print '==== Load training matrix...'
         x = self.load_train_matrix()
-        y = np.matrix(self.score_set)
+        y = np.transpose(np.array(self.score_set))
         print '==== Done'
-
-        print x
 
         # select random indices
         [n,m] = x.shape
@@ -211,8 +219,6 @@ def cost(x, w, y, h):
     [n,m] = x.shape
     val = 0
     for i in xrange(n):
-        print x[i]
-        print w
         val += (y[i] * np.log(h(x[i], w))
             + (1.0 - y[i]) * np.log(1.0 - h(x[i], w)))
     return -1.0 * (val / n)
@@ -245,49 +251,55 @@ def gradient_descent(train_set, y_train, test_set, y_test, speed):
     while (
         iteration < MAX_ITERATIONS
         and err_diff > THRESHOLD_CONVERGENCE
-        and err_diff < THRESHOLD_DIVERGENCE
+        # and err_diff < THRESHOLD_DIVERGENCE
     ):
+        iteration += 1
+        print 'iteration %d...' % iteration
+
         # compute w
         for i in xrange(n):
+            # print '%d / %d' % (i, n)
             x = train_set[i]
             for j in xrange(m):
-                w[j] = w[j] - speed * (h(x, w) - y[i]) * x[j]
+                w[j] = w[j] - speed * (h(x, w) - y_train[i]) * x[j]
 
         # test convergence
-        iteration += 1
         mse = cost(test_set, w, y_test, h)
         if iteration > 1:
             err_diff = abs(100 - (last_err / mse) * 100)
         last_err = mse
-        print 'iteration %d' % iteration
-        print 'MSE: %d' % mse
-        print 'DIFF: %d%\n' % err_diff
+        print 'MSE: %f' % mse
+        print 'DIFF: {} %'.format(err_diff)
+        print
 
     return w
 
 
 def main():
-    # sample train using the movie review corpus
-    documents = np.matrix([movie_reviews.raw(review_id) 
+    """
+    Sample train using the movie review corpus (Pang, Lee).
+    """
+    documents = np.array([movie_reviews.raw(review_id) 
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
 
-    sentiment_scores = np.matrix([1 if category == 'neg' else 0 
+    sentiment_scores = np.array([1 if category == 'neg' else 0 
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
 
     # select random indices
-    n = len(documents)
+    n = documents.shape[0]
     indices = np.random.permutation(n)
     threshold = np.floor(n*0.8)
     train_idx, test_idx = indices[:threshold], indices[threshold:]
 
     # select training and validation sets according to these indicies
-    x_train, x_test = documents[train_idx], documents[test_idx]
-    y_train, y_test = sentiment_scores[train_idx], sentiment_scores[test_idx]
+    x_train, x_test = documents[:, train_idx], documents[:, test_idx]
+    y_train, y_test = sentiment_scores[:, train_idx], sentiment_scores[:, test_idx]
 
+    # GO!
     sentiment = SentimentMachine(x_train.tolist(), y_train.tolist())
-    sentiment.train(0.0001)
+    sentiment.train(0.001)
 
 
 if __name__ == '__main__':
