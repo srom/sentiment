@@ -3,7 +3,7 @@ Sentiment Analysis
 
 Sentiment Analysis using logistic regression (via gradient descent).
 
---> [Usage Example]()
+--> [Usage Example](https://github.com/srom/sentiment/blob/master/sentiment/sentiment.py#L390)
 
 ### Dependencies
 
@@ -13,4 +13,4 @@ Sentiment Analysis using logistic regression (via gradient descent).
 
 ### License
 
-[MIT License]()
+[MIT License](https://github.com/srom/sentiment/blob/master/LICENSE)
