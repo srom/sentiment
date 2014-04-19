@@ -3,7 +3,7 @@
 import re
 from nltk.corpus import movie_reviews, stopwords
 from nltk.util import ngrams
-from nltk.tokenize import word_tokenize, wordpunct_tokenize
+from nltk.tokenize import word_tokenize
 from nltk.stem.porter import PorterStemmer
 from nltk.probability import FreqDist
 import numpy as np
