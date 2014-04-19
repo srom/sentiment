@@ -397,7 +397,7 @@ def main():
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
 
-    sentiment_scores = np.array([1 if category == 'neg' else 0 
+    sentiment_scores = np.array([0 if category == 'neg' else 1 
         for category in movie_reviews.categories() 
         for review_id in movie_reviews.fileids(category)])
 
