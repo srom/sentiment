@@ -351,7 +351,7 @@ def gradient_descent(x, y, w_zero, speed=SPEED, stochastic=False,
     last_cost_val = 0
     # define h as the sigmoid of transpose(w[i]) * x[i]
     h = lambda a,b: sigmoid(np.dot(a,b))
-    # stochastic gradient descent
+    # gradient descent
     while (
         iteration < max_iter
         and diff > threshold
